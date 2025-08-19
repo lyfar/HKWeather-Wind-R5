@@ -474,18 +474,20 @@ function fetchWeather() {
 }
 function draw() {
     background(230, 60, 12, 7);
-    var step = map(windSpeedKmh, 0, 60, 0.4, 3.5);
+    var dt = deltaTime / 16.6667;
+    var step = map(windSpeedKmh, 0, 60, 0.3, 3.0) * dt;
     var toDeg = (windDirectionDeg + 180) % 360;
     var toRad = radians(toDeg);
     var bias = atan2(-cos(toRad), sin(toRad));
     var maxTurb = map(windSpeedKmh, 0, 60, PI / 2, PI / 12);
     for (var i = 0; i < totalPoints; i++) {
         var p = points[i];
-        var n = noise(p.x * noiseMultiplier, p.y * noiseMultiplier);
+        var t = millis() * 0.00008;
+        var n = noise(p.x * noiseMultiplier + t, p.y * noiseMultiplier - t);
         var angle = bias + (n - 0.5) * maxTurb;
         var vx = cos(angle) * step;
         var vy = sin(angle) * step;
-        stroke((toDeg + n * 60) % 360, 50 + 40 * (step / 3.5), 100, 35);
+        stroke((toDeg + n * 60) % 360, 50 + 40 * (map(windSpeedKmh, 0, 60, 0.3, 3.0) / 3.0), 100, 35);
         strokeWeight(1.2);
         line(p.x, p.y, p.x + vx, p.y + vy);
         p.x += vx;
@@ -498,7 +500,7 @@ function draw() {
         }
     }
     drawTemperatureTopRight();
-    drawWindBottomInfo();
+    drawInfoUI();
 }
 function outOfCanvas(item) {
     if (item.x < 0)
@@ -521,32 +523,69 @@ function drawTemperatureTopRight() {
     text(t, width - 20, 20);
     pop();
 }
-function drawWindBottomInfo() {
-    var dirCompassFrom = degToCompass(windDirectionDeg);
-    var toDeg = (windDirectionDeg + 180 + 360) % 360;
-    var dirCompassTo = degToCompass(toDeg);
-    var speed = Math.round(windSpeedKmh);
-    var arrow = (toDeg > 225 && toDeg < 315) ? '←' :
-        (toDeg > 45 && toDeg < 135) ? '→' :
-            (toDeg >= 135 && toDeg <= 225) ? '↓' : '↑';
-    var label = arrow + " Wind: from " + dirCompassFrom + " (" + Math.round(windDirectionDeg) + "\u00B0) to " + dirCompassTo + " (" + Math.round(toDeg) + "\u00B0) \u2022 Mean " + speed + " km/h";
-    push();
-    noStroke();
-    var pad = 16;
-    textSize(min(width, height) * 0.028);
-    var tw = textWidth(label);
-    var th = textAscent() + textDescent();
-    fill(0, 0, 0, 120);
-    rectMode(CENTER);
-    rect(width / 2, height - (th + pad * 1.2), tw + pad * 2, th + pad, 12);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    text(label, width / 2, height - (th + pad * 1.2));
-    pop();
-}
 function degToCompass(deg) {
     var dirs = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
     var i = Math.round(((deg % 360) / 22.5)) % 16;
     return dirs[i < 0 ? i + 16 : i];
+}
+function drawInfoUI() {
+    var r = 14;
+    var pad = 18;
+    var x = width - pad;
+    var y = height - pad;
+    push();
+    noStroke();
+    fill(0, 0, 0, 140);
+    circle(x, y, r * 2);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(r);
+    text('i', x, y + 1);
+    pop();
+    if (dist(mouseX, mouseY, x, y) <= r + 4) {
+        var speed = Math.round(windSpeedKmh);
+        var toDeg = (windDirectionDeg + 180 + 360) % 360;
+        var fromTxt = degToCompass(windDirectionDeg) + " (" + Math.round(windDirectionDeg) + "\u00B0)";
+        var toTxt = degToCompass(toDeg) + " (" + Math.round(toDeg) + "\u00B0)";
+        var lines = [
+            'Hong Kong wind (live)',
+            "Now: " + speed + " km/h \u2022 from " + fromTxt + " \u2192 to " + toTxt,
+            'What you see: flowing lines show air moving across the city.',
+            'Faster wind = quicker, longer streaks.',
+            'Temperature is the number in the top‑right.',
+            'Source: Hong Kong Observatory (real‑time weather)'
+        ];
+        var fs = max(12, min(width, height) * 0.02);
+        textSize(fs);
+        var tw = 0;
+        for (var _i = 0, lines_2 = lines; _i < lines_2.length; _i++) {
+            var s = lines_2[_i];
+            tw = max(tw, textWidth(s));
+        }
+        var lh = fs * 1.25;
+        var th = lh * lines.length + 16;
+        var bx = x - tw - 28;
+        var by = y - th - 28;
+        push();
+        rectMode(CORNER);
+        noStroke();
+        fill(0, 0, 0, 180);
+        rect(bx, by, tw + 28, th + 16, 12);
+        fill(255);
+        textAlign(LEFT, TOP);
+        var ty = by + 10;
+        for (var i = 0; i < lines.length; i++) {
+            var s = lines[i];
+            if (i === 0) {
+                textStyle(BOLD);
+            }
+            else {
+                textStyle(NORMAL);
+            }
+            text(s, bx + 12, ty);
+            ty += lh;
+        }
+        pop();
+    }
 }
 //# sourceMappingURL=build.js.map

@@ -18,9 +18,9 @@ Then open `http://localhost:3000`.
 
 ## How it works (quick)
 
-- Each frame, 5,000 particles sample Perlin noise to get an angle. We add a bias equal to current wind direction; particles move step = map(speed, 0..60 km/h → 0.4..3.5 px/frame).
+- Each frame, 5,000 particles sample Perlin noise to get a local flow angle. We bias that angle toward the current wind heading and move particles with a physical step proportional to wind speed. Motion is frame-rate independent.
 - Temperature is fetched and rendered as a single number in the top-right.
-- Direction flips occasionally (noise reseed) to keep motion lively, inspired by Barney Codes’ flow-field demo.
+- Inspired by Barney Codes’ flow-field demo; tuned for real wind data.
 
 ## Data sources
 
@@ -28,6 +28,15 @@ Then open `http://localhost:3000`.
 - Regional wind (10‑minute mean/gust) FeatureServer is available for exploration: `https://portal.csdi.gov.hk/server/rest/services/common/hko_rcd_1634953844424_88011/FeatureServer`.
 
 Notes: Data is provisional and may fluctuate. This repo is for educational use only.
+
+## On-screen info (tooltip)
+
+Hover the “i” icon in the bottom-right to see:
+
+- What you’re seeing: a wind flow field where streaks represent the motion of air parcels.
+- Where the data comes from: HKO real-time weather (`rhrread`).
+- How direction is computed: meteorological “from” degrees are converted to a “to” heading for motion (e.g., from 90° → to 270°).
+- How speed is mapped: step = map(km/h, 0..60 → 0.3..3.0) × (deltaTime/16.7) so 8 km/h appears consistently across machines.
 
 ## License
 

@@ -43,7 +43,8 @@ async function fetchWeather() {
 
 function draw() {
   background(230, 60, 12, 7); // HSB: deep blue-ish with slight fade for trails
-  const step = map(windSpeedKmh, 0, 60, 0.4, 3.5);
+  const dt = deltaTime / 16.6667; // normalize to ~60fps
+  const step = map(windSpeedKmh, 0, 60, 0.3, 3.0) * dt;
   // Convert met direction (FROM) → screen heading (TO) with y-down
   const toDeg = (windDirectionDeg + 180) % 360;
   const toRad = radians(toDeg);
@@ -52,11 +53,12 @@ function draw() {
   const maxTurb = map(windSpeedKmh, 0, 60, PI / 2, PI / 12);
   for (let i = 0; i < totalPoints; i++) {
     const p = points[i];
-    const n = noise(p.x * noiseMultiplier, p.y * noiseMultiplier);
+    const t = millis() * 0.00008; // slow temporal drift to avoid banding
+    const n = noise(p.x * noiseMultiplier + t, p.y * noiseMultiplier - t);
     const angle = bias + (n - 0.5) * maxTurb;
     const vx = cos(angle) * step;
     const vy = sin(angle) * step;
-    stroke((toDeg + n * 60) % 360, 50 + 40 * (step / 3.5), 100, 35);
+    stroke((toDeg + n * 60) % 360, 50 + 40 * (map(windSpeedKmh,0,60,0.3,3.0)/3.0), 100, 35);
     strokeWeight(1.2);
     line(p.x, p.y, p.x + vx, p.y + vy);
     p.x += vx;
@@ -71,7 +73,7 @@ function draw() {
   }
 
   drawTemperatureTopRight();
-  drawWindBottomInfo();
+  drawInfoUI();
 }
 
 function outOfCanvas(item: p5.Vector) {
@@ -94,35 +96,71 @@ function drawTemperatureTopRight() {
   pop();
 }
 
-function drawWindBottomInfo() {
-  const dirCompassFrom = degToCompass(windDirectionDeg);
-  const toDeg = (windDirectionDeg + 180 + 360) % 360;
-  const dirCompassTo = degToCompass(toDeg);
-  const speed = Math.round(windSpeedKmh);
-  // Arrow direction mirrors flow: if wind is to the left (W), draw ←
-  const arrow = (toDeg > 225 && toDeg < 315) ? '←' :
-                (toDeg > 45 && toDeg < 135) ? '→' :
-                (toDeg >= 135 && toDeg <= 225) ? '↓' : '↑';
-  const label = `${arrow} Wind: from ${dirCompassFrom} (${Math.round(windDirectionDeg)}°) to ${dirCompassTo} (${Math.round(toDeg)}°) • Mean ${speed} km/h`;
-  push();
-  noStroke();
-  const pad = 16;
-  textSize(min(width, height) * 0.028);
-  const tw = textWidth(label);
-  const th = textAscent() + textDescent();
-  fill(0, 0, 0, 120);
-  rectMode(CENTER);
-  rect(width / 2, height - (th + pad * 1.2), tw + pad * 2, th + pad, 12);
-  fill(255);
-  textAlign(CENTER, CENTER);
-  text(label, width / 2, height - (th + pad * 1.2));
-  pop();
-}
-
 function degToCompass(deg: number): string {
   const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   const i = Math.round(((deg % 360) / 22.5)) % 16;
   return dirs[i < 0 ? i + 16 : i];
 }
 
+
+// Bottom-right info icon with hover tooltip
+function drawInfoUI() {
+  const r = 14;
+  const pad = 18;
+  const x = width - pad;
+  const y = height - pad;
+  // icon
+  push();
+  noStroke();
+  fill(0, 0, 0, 140);
+  circle(x, y, r * 2);
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(r);
+  text('i', x, y + 1);
+  pop();
+
+  // hover
+  if (dist(mouseX, mouseY, x, y) <= r + 4) {
+    const speed = Math.round(windSpeedKmh);
+    const toDeg = (windDirectionDeg + 180 + 360) % 360;
+    const fromTxt = `${degToCompass(windDirectionDeg)} (${Math.round(windDirectionDeg)}°)`;
+    const toTxt = `${degToCompass(toDeg)} (${Math.round(toDeg)}°)`;
+    const lines = [
+      'Hong Kong wind (live)',
+      `Now: ${speed} km/h • from ${fromTxt} → to ${toTxt}`,
+      'What you see: flowing lines show air moving across the city.',
+      'Faster wind = quicker, longer streaks.',
+      'Temperature is the number in the top‑right.',
+      'Source: Hong Kong Observatory (real‑time weather)'
+    ];
+    const fs = max(12, min(width, height) * 0.02);
+    textSize(fs);
+    let tw = 0;
+    for (const s of lines) tw = max(tw, textWidth(s));
+    const lh = fs * 1.25;
+    const th = lh * lines.length + 16;
+    const bx = x - tw - 28; // left of icon
+    const by = y - th - 28; // above icon
+    push();
+    rectMode(CORNER);
+    noStroke();
+    fill(0, 0, 0, 180);
+    rect(bx, by, tw + 28, th + 16, 12);
+    fill(255);
+    textAlign(LEFT, TOP);
+    let ty = by + 10;
+    for (let i = 0; i < lines.length; i++) {
+      const s = lines[i];
+      if (i === 0) {
+        textStyle(BOLD);
+      } else {
+        textStyle(NORMAL);
+      }
+      text(s, bx + 12, ty);
+      ty += lh;
+    }
+    pop();
+  }
+}
 

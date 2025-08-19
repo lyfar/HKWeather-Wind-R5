@@ -429,8 +429,6 @@ var WeatherService = (function () {
 var points = [];
 var totalPoints = 5000;
 var noiseMultiplier = 0.01;
-var direction = 'left';
-var noiseSeedCount = 0;
 var currentTempC = null;
 var windSpeedKmh = 8;
 var windDirectionDeg = 90;
@@ -440,7 +438,6 @@ function setup() {
     for (var i = 0; i < totalPoints; i++) {
         points.push(createVector(random(width), random(height)));
     }
-    scheduleDirectionToggle();
     fetchWeather();
     setInterval(fetchWeather, REFRESH_INTERVAL_MS);
     background(10, 10, 50);
@@ -463,6 +460,7 @@ function fetchWeather() {
                         windSpeedKmh = data.windSpeedKmh;
                     if (typeof data.windDirectionDeg === 'number')
                         windDirectionDeg = data.windDirectionDeg;
+                    noiseSeed(Math.floor(Date.now() / 60000));
                     return [3, 3];
                 case 2:
                     e_1 = _a.sent();
@@ -489,16 +487,9 @@ function draw() {
         circle(p.x, p.y, (p.z || 0));
         var n = noise(p.x * noiseMultiplier, p.y * noiseMultiplier);
         var angle = TWO_PI * n + bias;
-        if (direction === 'left') {
-            p.x += cos(angle) * step;
-            p.y += sin(angle) * step;
-            p.z = (p.z || 0) + 0.02 * step;
-        }
-        else {
-            p.x -= cos(angle) * step;
-            p.y += sin(angle) * step;
-            p.z = (p.z || 0) - 0.02 * step;
-        }
+        p.x += cos(angle) * step;
+        p.y += sin(angle) * step;
+        p.z = (p.z || 0) + 0.02 * step;
         if (outOfCanvas(p)) {
             p.x = random(width);
             p.y = random(height);
@@ -507,15 +498,6 @@ function draw() {
     }
     drawTemperatureTopRight();
     drawWindBottomInfo();
-}
-function scheduleDirectionToggle() {
-    var delay = random(5000, 15000);
-    setTimeout(function () {
-        direction = direction === 'left' ? 'right' : 'left';
-        noiseSeedCount += 1;
-        noiseSeed(noiseSeedCount);
-        scheduleDirectionToggle();
-    }, delay);
 }
 function outOfCanvas(item) {
     return item.x < 0 || item.y < 0 || item.y > height || item.x > width;

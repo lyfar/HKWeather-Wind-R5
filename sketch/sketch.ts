@@ -5,8 +5,7 @@ let points: p5.Vector[] = [];
 const totalPoints = 5000;
 
 let noiseMultiplier = 0.01;
-let direction: 'left' | 'right' = 'left';
-let noiseSeedCount = 0;
+// flow always follows real wind; no random direction flips
 
 let currentTempC: number | null = null;
 let windSpeedKmh: number = 8;
@@ -19,7 +18,6 @@ function setup() {
   for (let i = 0; i < totalPoints; i++) {
     points.push(createVector(random(width), random(height)));
   }
-  scheduleDirectionToggle();
   fetchWeather();
   setInterval(fetchWeather, REFRESH_INTERVAL_MS);
   background(10, 10, 50);
@@ -35,6 +33,8 @@ async function fetchWeather() {
     currentTempC = data.temperatureC;
     if (typeof data.windSpeedKmh === 'number') windSpeedKmh = data.windSpeedKmh;
     if (typeof data.windDirectionDeg === 'number') windDirectionDeg = data.windDirectionDeg as number;
+    // reseed noise gently on data refresh to avoid visual stalling
+    noiseSeed(Math.floor(Date.now() / 60000));
   } catch (e) {
     console.error('Failed to fetch weather', e);
   }
@@ -57,15 +57,9 @@ function draw() {
     circle(p.x, p.y, (p.z || 0));
     const n = noise(p.x * noiseMultiplier, p.y * noiseMultiplier);
     const angle = TWO_PI * n + bias;
-    if (direction === 'left') {
-      p.x += cos(angle) * step;
-      p.y += sin(angle) * step;
-      p.z = (p.z || 0) + 0.02 * step;
-    } else {
-      p.x -= cos(angle) * step;
-      p.y += sin(angle) * step;
-      p.z = (p.z || 0) - 0.02 * step;
-    }
+    p.x += cos(angle) * step;
+    p.y += sin(angle) * step;
+    p.z = (p.z || 0) + 0.02 * step;
 
     if (outOfCanvas(p)) {
       p.x = random(width);
@@ -76,16 +70,6 @@ function draw() {
 
   drawTemperatureTopRight();
   drawWindBottomInfo();
-}
-
-function scheduleDirectionToggle() {
-  const delay = random(5000, 15000);
-  setTimeout(() => {
-    direction = direction === 'left' ? 'right' : 'left';
-    noiseSeedCount += 1;
-    noiseSeed(noiseSeedCount);
-    scheduleDirectionToggle();
-  }, delay);
 }
 
 function outOfCanvas(item: p5.Vector) {

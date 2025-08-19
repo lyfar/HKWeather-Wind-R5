@@ -477,7 +477,9 @@ function draw() {
     stroke(255);
     background(10, 10, 50, 5);
     var step = map(windSpeedKmh, 0, 60, 0.4, 3.5);
-    var bias = radians(windDirectionDeg);
+    var toDeg = (windDirectionDeg + 180) % 360;
+    var toRad = radians(toDeg);
+    var bias = atan2(-cos(toRad), sin(toRad));
     for (var i = 0; i < totalPoints; i++) {
         var p = points[i];
         stroke(255);
@@ -529,9 +531,11 @@ function drawTemperatureTopRight() {
     pop();
 }
 function drawWindBottomInfo() {
-    var dirCompass = degToCompass(windDirectionDeg);
+    var dirCompassFrom = degToCompass(windDirectionDeg);
+    var toDeg = (windDirectionDeg + 180 + 360) % 360;
+    var dirCompassTo = degToCompass(toDeg);
     var speed = Math.round(windSpeedKmh);
-    var label = "Wind: " + dirCompass + " (" + Math.round(windDirectionDeg) + "\u00B0) \u2022 Mean " + speed + " km/h";
+    var label = "Wind: from " + dirCompassFrom + " (" + Math.round(windDirectionDeg) + "\u00B0) \u2192 to " + dirCompassTo + " (" + Math.round(toDeg) + "\u00B0) \u2022 Mean " + speed + " km/h";
     push();
     noStroke();
     var pad = 16;

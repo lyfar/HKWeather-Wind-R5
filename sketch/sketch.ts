@@ -44,7 +44,10 @@ function draw() {
   stroke(255);
   background(10, 10, 50, 5);
   const step = map(windSpeedKmh, 0, 60, 0.4, 3.5);
-  const bias = radians(windDirectionDeg);
+  // Convert met direction (FROM) → screen heading (TO) with y-down
+  const toDeg = (windDirectionDeg + 180) % 360;
+  const toRad = radians(toDeg);
+  const bias = atan2(-cos(toRad), sin(toRad));
   for (let i = 0; i < totalPoints; i++) {
     const p = points[i];
     stroke(255);
@@ -101,9 +104,11 @@ function drawTemperatureTopRight() {
 }
 
 function drawWindBottomInfo() {
-  const dirCompass = degToCompass(windDirectionDeg);
+  const dirCompassFrom = degToCompass(windDirectionDeg);
+  const toDeg = (windDirectionDeg + 180 + 360) % 360;
+  const dirCompassTo = degToCompass(toDeg);
   const speed = Math.round(windSpeedKmh);
-  const label = `Wind: ${dirCompass} (${Math.round(windDirectionDeg)}°) • Mean ${speed} km/h`;
+  const label = `Wind: from ${dirCompassFrom} (${Math.round(windDirectionDeg)}°) → to ${dirCompassTo} (${Math.round(toDeg)}°) • Mean ${speed} km/h`;
   push();
   noStroke();
   const pad = 16;

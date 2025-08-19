@@ -435,6 +435,7 @@ var windDirectionDeg = 90;
 var REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 function setup() {
     createCanvas(windowWidth, windowHeight);
+    colorMode(HSB, 360, 100, 100, 100);
     for (var i = 0; i < totalPoints; i++) {
         points.push(createVector(random(width), random(height)));
     }
@@ -472,23 +473,23 @@ function fetchWeather() {
     });
 }
 function draw() {
-    stroke(255);
-    background(10, 10, 50, 5);
+    background(230, 60, 12, 7);
     var step = map(windSpeedKmh, 0, 60, 0.4, 3.5);
     var toDeg = (windDirectionDeg + 180) % 360;
     var toRad = radians(toDeg);
     var bias = atan2(-cos(toRad), sin(toRad));
+    var maxTurb = map(windSpeedKmh, 0, 60, PI / 2, PI / 12);
     for (var i = 0; i < totalPoints; i++) {
         var p = points[i];
-        stroke(255);
-        point(p.x, p.y);
-        noStroke();
-        fill(p.x % 255, p.y % 255, (p.z || 0) * 55, 40);
-        circle(p.x, p.y, (p.z || 0));
         var n = noise(p.x * noiseMultiplier, p.y * noiseMultiplier);
-        var angle = TWO_PI * n + bias;
-        p.x += cos(angle) * step;
-        p.y += sin(angle) * step;
+        var angle = bias + (n - 0.5) * maxTurb;
+        var vx = cos(angle) * step;
+        var vy = sin(angle) * step;
+        stroke((toDeg + n * 60) % 360, 50 + 40 * (step / 3.5), 100, 35);
+        strokeWeight(1.2);
+        line(p.x, p.y, p.x + vx, p.y + vy);
+        p.x += vx;
+        p.y += vy;
         p.z = (p.z || 0) + 0.02 * step;
         if (outOfCanvas(p)) {
             p.x = random(width);
@@ -500,7 +501,15 @@ function draw() {
     drawWindBottomInfo();
 }
 function outOfCanvas(item) {
-    return item.x < 0 || item.y < 0 || item.y > height || item.x > width;
+    if (item.x < 0)
+        item.x += width;
+    if (item.x > width)
+        item.x -= width;
+    if (item.y < 0)
+        item.y += height;
+    if (item.y > height)
+        item.y -= height;
+    return false;
 }
 function drawTemperatureTopRight() {
     push();
@@ -517,7 +526,10 @@ function drawWindBottomInfo() {
     var toDeg = (windDirectionDeg + 180 + 360) % 360;
     var dirCompassTo = degToCompass(toDeg);
     var speed = Math.round(windSpeedKmh);
-    var label = "Wind: from " + dirCompassFrom + " (" + Math.round(windDirectionDeg) + "\u00B0) \u2192 to " + dirCompassTo + " (" + Math.round(toDeg) + "\u00B0) \u2022 Mean " + speed + " km/h";
+    var arrow = (toDeg > 225 && toDeg < 315) ? '←' :
+        (toDeg > 45 && toDeg < 135) ? '→' :
+            (toDeg >= 135 && toDeg <= 225) ? '↓' : '↑';
+    var label = arrow + " Wind: from " + dirCompassFrom + " (" + Math.round(windDirectionDeg) + "\u00B0) to " + dirCompassTo + " (" + Math.round(toDeg) + "\u00B0) \u2022 Mean " + speed + " km/h";
     push();
     noStroke();
     var pad = 16;

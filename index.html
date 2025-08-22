@@ -23,11 +23,9 @@
       }
       html, body { height: 100%; background: #000; }
       #map { position: fixed; inset: 0; z-index: 0; background: #000; }
-      /* Dark style for raster tiles */
-      #map .leaflet-tile { filter: grayscale(1) brightness(0.24) contrast(1.35) saturate(0.28); }
       canvas { position: fixed; inset: 0; z-index: 10; background: transparent !important; pointer-events: none; image-rendering: pixelated; }
       /* optional extra darkening below canvas, above map */
-      #dark-overlay { position: fixed; inset: 0; z-index: 5; background: rgba(0,0,0,0.55); pointer-events: none; }
+      #dark-overlay { position: fixed; inset: 0; z-index: 5; background: rgba(0,0,0,1); pointer-events: none; }
       #landsd-attrib { position: fixed; left: 10px; bottom: 8px; z-index: 11; color: #bbb; font: 12px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; background: rgba(0,0,0,0.25); padding: 4px 6px; border-radius: 6px; }
       .station-tooltip { background: rgba(0,0,0,0.8) !important; color: white !important; border: 1px solid #444 !important; border-radius: 4px !important; }
     </style>
@@ -42,8 +40,21 @@
         map.setMinZoom(10);
         map.setMaxZoom(20);
         map.setMaxBounds(bounds.pad(0.25));
-        const topo = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 1.0, updateWhenZooming: false, updateWhenIdle: true }).addTo(map);
-        const labels = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 0.0 }).addTo(map);
+        // Centralized style and layers
+        try { window.MapStyle && window.MapStyle.applyCssFilters(); } catch {}
+        let topo, labels;
+        try {
+          if (window.MapStyle) {
+            const base = window.MapStyle.createBaseLayers();
+            topo = base.topo.addTo(map);
+            labels = base.labels.addTo(map);
+            window.__baseLayers = base;
+            window.MapStyle.setLayerOpacities(base);
+          } else {
+            topo = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 1.0, updateWhenZooming: false, updateWhenIdle: true }).addTo(map);
+            labels = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 0.0 }).addTo(map);
+          }
+        } catch {}
         // Station markers layer
         window.stationMarkers = L.layerGroup().addTo(map);
         // Station markers layer created
@@ -80,6 +91,7 @@
 
   <body>
     <div id="map"></div>
+    <div id="dark-overlay"></div>
     <div id="landsd-attrib">Map © Lands Department</div>
   </body>
 </html>

@@ -229,6 +229,69 @@ var ColorHelper = (function () {
     };
     return ColorHelper;
 }());
+(function () {
+    var MapStyle = {
+        config: {
+            tileFilter: 'grayscale(1) brightness(0.70) contrast(1.10) saturate(0.20)',
+            darkOverlayOpacity: 0.18,
+            topoOpacity: 0.45,
+            labelOpacity: 0.1,
+            topoUrl: 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png',
+            labelsUrl: 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png',
+            updateWhenZooming: false,
+            updateWhenIdle: true,
+            maxZoom: 20,
+        },
+        applyCssFilters: function () {
+            try {
+                var id = 'map-style-override';
+                var el = document.getElementById(id);
+                if (!el) {
+                    el = document.createElement('style');
+                    el.id = id;
+                    document.head.appendChild(el);
+                }
+                el.textContent = "#map .leaflet-tile { filter: " + MapStyle.config.tileFilter + " !important; }";
+            }
+            catch (_a) { }
+            try {
+                var overlay = document.getElementById('dark-overlay');
+                if (overlay) {
+                    overlay.style.background = "rgba(0,0,0," + MapStyle.config.darkOverlayOpacity + ")";
+                }
+            }
+            catch (_b) { }
+        },
+        createBaseLayers: function () {
+            var Lref = window.L;
+            var optsBase = {
+                maxZoom: MapStyle.config.maxZoom,
+                crossOrigin: true,
+                opacity: MapStyle.config.topoOpacity,
+                updateWhenZooming: MapStyle.config.updateWhenZooming,
+                updateWhenIdle: MapStyle.config.updateWhenIdle,
+            };
+            var topo = Lref.tileLayer(MapStyle.config.topoUrl, optsBase);
+            var labels = Lref.tileLayer(MapStyle.config.labelsUrl, {
+                maxZoom: MapStyle.config.maxZoom,
+                crossOrigin: true,
+                opacity: MapStyle.config.labelOpacity,
+            });
+            return { topo: topo, labels: labels };
+        },
+        setLayerOpacities: function (layers) {
+            try {
+                layers.topo.setOpacity(MapStyle.config.topoOpacity);
+            }
+            catch (_a) { }
+            try {
+                layers.labels.setOpacity(MapStyle.config.labelOpacity);
+            }
+            catch (_b) { }
+        }
+    };
+    window.MapStyle = MapStyle;
+})();
 var PolygonHelper = (function () {
     function PolygonHelper() {
     }

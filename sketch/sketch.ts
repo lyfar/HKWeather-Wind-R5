@@ -64,23 +64,30 @@ function addStationToMap(lat: number, lon: number, name: string, speed: number, 
     const anyWin: any = window as any;
     if (!anyWin?.leafletMap || !anyWin?.stationMarkers) return;
     
-    // Create minimal dark marker
+    // Create minimal dark marker (larger and tap-friendly on touch devices)
+    const isTouch = (('ontouchstart' in window) || (navigator as any).maxTouchPoints > 0);
     const compassDir = degToCompass(dirDeg);
+    const r = isTouch ? 9 : 4;
     const marker = (window as any).L.circleMarker([lat, lon], {
-      radius: 4,
+      radius: r,
       fillColor: '#333',
       color: '#666',
-      weight: 1,
-      opacity: 0.8,
-      fillOpacity: 0.6
+      weight: isTouch ? 2 : 1,
+      opacity: 0.9,
+      fillOpacity: 0.75,
+      bubblingMouseEvents: true
     });
-    
-    marker.bindTooltip(`${name}<br/>${Math.round(speed)} km/h • ${compassDir} (${Math.round(dirDeg)}°)`, {
+
+    const html = `${name}<br/>${Math.round(speed)} km/h • ${compassDir} (${Math.round(dirDeg)}°)`;
+    marker.bindTooltip(html, {
       permanent: false,
       direction: 'top',
-      className: 'station-tooltip'
+      className: 'station-tooltip',
+      sticky: true
     });
-    
+    marker.bindPopup(html, { closeButton: true });
+    marker.on('click', () => marker.openPopup());
+
     anyWin.stationMarkers.addLayer(marker);
   } catch (e) {
     console.error('Failed to add station marker:', e);
@@ -141,8 +148,8 @@ class SmokeParticle {
   dead(): boolean { return this.life <= 0; }
 }
 
-// Poll every 30s to keep it feeling live (HKO typically updates every ~10m)
-const REFRESH_INTERVAL_MS = 30 * 1000;
+// Polling disabled per request; we now fetch only on load/reload
+const REFRESH_INTERVAL_MS = 30 * 1000; // retained for reference, unused
 
 function setup() {
   createCanvas(windowWidth, windowHeight);
@@ -158,6 +165,8 @@ function setup() {
   // If Leaflet is present, keep canvas above it
   try {
     (document.querySelector('canvas') as any)?.style && ((document.querySelector('canvas') as any).style.zIndex = '10');
+    // Allow interactions to pass through to underlying Leaflet map (mobile tapping)
+    try { ((document.querySelector('canvas') as any).style.pointerEvents = 'none'); } catch {}
     // Capture global mouse position for hover when canvas has pointer-events:none
     document.addEventListener('mousemove', (e) => {
       (window as any).__mouseClient = { x: e.clientX, y: e.clientY };
@@ -171,15 +180,8 @@ function setup() {
     (v as any).vy = sin(random(TWO_PI));
     points.push(v);
   }
+  // Fetch once on load (no periodic polling)
   fetchWeather();
-  setInterval(fetchWeather, REFRESH_INTERVAL_MS);
-  // Refresh on window focus
-  if (typeof window !== 'undefined') {
-    window.addEventListener('focus', () => {
-      fetchWeather();
-      fetchStationWind();
-    });
-  }
   // Load stations, set default to Central Pier if present
   loadStationList().then(() => {
     const def = stationList.findIndex(s => (s.name || '').toLowerCase() === 'central pier');
@@ -188,8 +190,7 @@ function setup() {
     fetchStationsProgressive();
     loadMinimalMapGeo();
   });
-  // Also fetch station CSV as a live fallback/override
-  setInterval(fetchStationWind, REFRESH_INTERVAL_MS);
+  // Station CSV fetched once through progressive loader; no periodic polling
   // Keep canvas transparent so Leaflet basemap remains visible beneath
   clear();
 }

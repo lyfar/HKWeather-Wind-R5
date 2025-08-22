@@ -740,21 +740,28 @@ function addStationToMap(lat, lon, name, speed, dirDeg) {
         var anyWin = window;
         if (!(anyWin === null || anyWin === void 0 ? void 0 : anyWin.leafletMap) || !(anyWin === null || anyWin === void 0 ? void 0 : anyWin.stationMarkers))
             return;
+        var isTouch = (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
         var compassDir = degToCompass(dirDeg);
-        var marker = window.L.circleMarker([lat, lon], {
-            radius: 4,
+        var r = isTouch ? 9 : 4;
+        var marker_1 = window.L.circleMarker([lat, lon], {
+            radius: r,
             fillColor: '#333',
             color: '#666',
-            weight: 1,
-            opacity: 0.8,
-            fillOpacity: 0.6
+            weight: isTouch ? 2 : 1,
+            opacity: 0.9,
+            fillOpacity: 0.75,
+            bubblingMouseEvents: true
         });
-        marker.bindTooltip(name + "<br/>" + Math.round(speed) + " km/h \u2022 " + compassDir + " (" + Math.round(dirDeg) + "\u00B0)", {
+        var html = name + "<br/>" + Math.round(speed) + " km/h \u2022 " + compassDir + " (" + Math.round(dirDeg) + "\u00B0)";
+        marker_1.bindTooltip(html, {
             permanent: false,
             direction: 'top',
-            className: 'station-tooltip'
+            className: 'station-tooltip',
+            sticky: true
         });
-        anyWin.stationMarkers.addLayer(marker);
+        marker_1.bindPopup(html, { closeButton: true });
+        marker_1.on('click', function () { return marker_1.openPopup(); });
+        anyWin.stationMarkers.addLayer(marker_1);
     }
     catch (e) {
         console.error('Failed to add station marker:', e);
@@ -817,12 +824,16 @@ function setup() {
     activePoints = Math.min(totalPoints, Math.max(800, Math.floor(totalPoints * 0.12)));
     try {
         ((_a = document.querySelector('canvas')) === null || _a === void 0 ? void 0 : _a.style) && (document.querySelector('canvas').style.zIndex = '10');
+        try {
+            (document.querySelector('canvas').style.pointerEvents = 'none');
+        }
+        catch (_b) { }
         document.addEventListener('mousemove', function (e) {
             window.__mouseClient = { x: e.clientX, y: e.clientY };
         }, { passive: true });
         window.clearStationEmitters = clearStationEmitters;
     }
-    catch (_b) { }
+    catch (_c) { }
     for (var i = 0; i < totalPoints; i++) {
         var v = createVector(random(width), random(height));
         v.vx = cos(random(TWO_PI));
@@ -830,13 +841,6 @@ function setup() {
         points.push(v);
     }
     fetchWeather();
-    setInterval(fetchWeather, REFRESH_INTERVAL_MS);
-    if (typeof window !== 'undefined') {
-        window.addEventListener('focus', function () {
-            fetchWeather();
-            fetchStationWind();
-        });
-    }
     loadStationList().then(function () {
         var def = stationList.findIndex(function (s) { return (s.name || '').toLowerCase() === 'central pier'; });
         stationIdx = -1;
@@ -844,7 +848,6 @@ function setup() {
         fetchStationsProgressive();
         loadMinimalMapGeo();
     });
-    setInterval(fetchStationWind, REFRESH_INTERVAL_MS);
     clear();
 }
 function windowResized() {

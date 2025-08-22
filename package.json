@@ -5,8 +5,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "run-p start-compile start-run",
+    "start-no-reload": "run-p start-compile start-serve",
     "start-compile": "tsc --watch",
-    "start-run": "browser-sync start --server -w"
+    "start-run": "browser-sync start --server -w",
+    "start-serve": "browser-sync start --server"
   },
   "homepage": "https://github.com/Gaweph/p5-typescript-starter#readme",
   "devDependencies": {

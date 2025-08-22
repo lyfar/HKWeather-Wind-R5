@@ -9,6 +9,7 @@
     "sourceMap": true,
     "target": "es5",
     "moduleResolution": "node",
-    "lib": ["es2017", "dom"]
+    "lib": ["es2017", "dom"],
+    "skipLibCheck": true
   }
 }

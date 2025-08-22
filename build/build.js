@@ -1527,20 +1527,30 @@ function drawInfoUI() {
     text('i', x, y + 1);
     pop();
     if (dist(mouseX, mouseY, x, y) <= r + 4) {
-        var speed = isNaN(windSpeedKmhCurrent) ? 0 : Math.round(windSpeedKmhCurrent);
-        var toDeg = (!isNaN(windDirectionDegCurrent) ? (windDirectionDegCurrent + 180 + 360) % 360 : 0);
-        var fromTxt = !isNaN(windDirectionDegCurrent)
-            ? degToCompass(windDirectionDegCurrent) + " (" + Math.round(windDirectionDegCurrent) + "\u00B0)"
-            : '--';
-        var toTxt = degToCompass(toDeg) + " (" + Math.round(toDeg) + "\u00B0)";
+        var hasSpeed = !isNaN(windSpeedKmhCurrent);
+        var hasDir = !isNaN(windDirectionDegCurrent);
+        var speedNum = hasSpeed ? Math.round(windSpeedKmhCurrent) : null;
+        var toDeg = hasDir ? (windDirectionDegCurrent + 180 + 360) % 360 : null;
+        var fromTxt = hasDir ? degToCompass(windDirectionDegCurrent) + " (" + Math.round(windDirectionDegCurrent) + "\u00B0)" : null;
+        var toTxt = hasDir && toDeg != null ? degToCompass(toDeg) + " (" + Math.round(toDeg) + "\u00B0)" : null;
+        var nowLine = hasSpeed && hasDir
+            ? "Now: " + speedNum + " km/h \u2022 from " + fromTxt + " \u2192 to " + toTxt
+            : hasSpeed
+                ? "Now: " + speedNum + " km/h"
+                : hasDir
+                    ? "Now: from " + fromTxt + " \u2192 to " + toTxt
+                    : 'Now: —';
+        var stationLine = (typeof stationIdx === 'number' && stationIdx === -1)
+            ? 'Mode: Hong Kong (composite of stations)'
+            : (currentStationName ? "Station: " + currentStationName : 'Station: auto');
         var lines = [
             'Hong Kong wind (live)',
-            "Now: " + speed + " km/h \u2022 from " + fromTxt + " \u2192 to " + toTxt,
-            (currentStationName ? "Station: " + currentStationName : 'Station: auto'),
-            'What you see: flowing lines show air moving across the city.',
-            'Faster wind = quicker, longer streaks.',
-            'Temperature is the number in the top‑right.',
-            'Source: HKO real‑time weather • Station CSV fallback'
+            nowLine,
+            stationLine,
+            'Flowing lines show air movement; faster wind → longer, quicker streaks.',
+            'Direction: FROM → TO (e.g., 90° from = 270° to).',
+            'Temperature: top‑right.',
+            'Pan/zoom map; tap station markers for details.'
         ];
         var fs = max(12, min(width, height) * 0.02);
         textSize(fs);

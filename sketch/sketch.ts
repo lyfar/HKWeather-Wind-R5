@@ -796,20 +796,30 @@ function drawInfoUI() {
 
   // hover
   if (dist(mouseX, mouseY, x, y) <= r + 4) {
-    const speed = isNaN(windSpeedKmhCurrent) ? 0 : Math.round(windSpeedKmhCurrent);
-    const toDeg = (!isNaN(windDirectionDegCurrent) ? (windDirectionDegCurrent + 180 + 360) % 360 : 0);
-    const fromTxt = !isNaN(windDirectionDegCurrent)
-      ? `${degToCompass(windDirectionDegCurrent)} (${Math.round(windDirectionDegCurrent)}°)`
-      : '--';
-    const toTxt = `${degToCompass(toDeg)} (${Math.round(toDeg)}°)`;
+    const hasSpeed = !isNaN(windSpeedKmhCurrent);
+    const hasDir = !isNaN(windDirectionDegCurrent);
+    const speedNum = hasSpeed ? Math.round(windSpeedKmhCurrent) : null;
+    const toDeg = hasDir ? (windDirectionDegCurrent + 180 + 360) % 360 : null;
+    const fromTxt = hasDir ? `${degToCompass(windDirectionDegCurrent)} (${Math.round(windDirectionDegCurrent)}°)` : null;
+    const toTxt = hasDir && toDeg != null ? `${degToCompass(toDeg)} (${Math.round(toDeg)}°)` : null;
+    const nowLine = hasSpeed && hasDir
+      ? `Now: ${speedNum} km/h • from ${fromTxt} → to ${toTxt}`
+      : hasSpeed
+        ? `Now: ${speedNum} km/h`
+        : hasDir
+          ? `Now: from ${fromTxt} → to ${toTxt}`
+          : 'Now: —';
+    const stationLine = (typeof stationIdx === 'number' && stationIdx === -1)
+      ? 'Mode: Hong Kong (composite of stations)'
+      : (currentStationName ? `Station: ${currentStationName}` : 'Station: auto');
     const lines = [
       'Hong Kong wind (live)',
-      `Now: ${speed} km/h • from ${fromTxt} → to ${toTxt}`,
-      (currentStationName ? `Station: ${currentStationName}` : 'Station: auto'),
-      'What you see: flowing lines show air moving across the city.',
-      'Faster wind = quicker, longer streaks.',
-      'Temperature is the number in the top‑right.',
-      'Source: HKO real‑time weather • Station CSV fallback'
+      nowLine,
+      stationLine,
+      'Flowing lines show air movement; faster wind → longer, quicker streaks.',
+      'Direction: FROM → TO (e.g., 90° from = 270° to).',
+      'Temperature: top‑right.',
+      'Pan/zoom map; tap station markers for details.'
     ];
     const fs = max(12, min(width, height) * 0.02);
     textSize(fs);

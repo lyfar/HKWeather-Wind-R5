@@ -33,10 +33,10 @@ Notes: Data is provisional and may fluctuate. This repo is for educational use o
 
 Hover the “i” icon in the bottom-right to see:
 
-- What you’re seeing: a wind flow field where streaks represent the motion of air parcels.
-- Where the data comes from: HKO real-time weather (`rhrread`).
-- How direction is computed: meteorological “from” degrees are converted to a “to” heading for motion (e.g., from 90° → to 270°).
-- How speed is mapped: step = map(km/h, 0..60 → 0.3..3.0) × (deltaTime/16.7) so 8 km/h appears consistently across machines.
+- Live Hong Kong wind (HKO).
+- Flowing lines show air movement; faster wind → longer, quicker streaks.
+- Direction shown as FROM → TO (e.g., 90° from = 270° to).
+- Temperature: top‑right.
 
 ## License
 
@@ -118,6 +118,8 @@ When `Hong Kong` mode is active (no single station selected), multiple station s
 - Station CSVs are fetched progressively in small batches to avoid rate limiting, with short delays.
 - CORS is handled via public proxies; transient failures fall back gracefully.
 - If Leaflet is present on the page, station markers are added directly to the map and screen projection uses the map’s transform for accuracy.
+- Hong Kong mode uses a single map view; pan/zoom freely.
+- Tap a station marker to see its speed/direction; use map controls to zoom to a station.
 
 ## Key formulas (reference)
 

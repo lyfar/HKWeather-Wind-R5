@@ -12,7 +12,7 @@ type TileLayerPair = { topo: any; labels: any };
       // Dark overlay above the map (below canvas). Lower for more visibility.
       darkOverlayOpacity: 0.18,
       // Base layer opacities
-      topoOpacity: 0.45,
+      topoOpacity: 1,
       labelOpacity: 0.1,
       // Tile URLs (LandsD)
       topoUrl: 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png',

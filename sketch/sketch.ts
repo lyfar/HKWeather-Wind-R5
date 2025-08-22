@@ -1,11 +1,22 @@
 // Minimal wind visualization based on Barney Codes flow field
 // Wind direction/force from HKO; temperature displayed top-right
 
+declare const drawingContext: any;
+
 let points: p5.Vector[] = [];
 let totalPoints = 5000;
 let activePoints = 0; // gradually ramps up to totalPoints
 let rampStartMs = 0;
 const RAMP_DURATION_MS = 4500;
+// Vis emphasis: global multiplier for particle thickness (can be overridden via URL)
+let particleThicknessMultiplier = 1.0;
+// Trail controls: persistent trails via fade, and per-frame segment length boost
+let trailEnabled = true;
+let trailFadePct = 4; // 0..100 alpha used for destination-out fade each frame; lower => longer trails
+let segmentLengthMultiplier = 1.0; // >1 draws longer line segments without increasing motion
+// Track last canvas size to avoid clearing canvas on spurious resize events (e.g., Leaflet zoom)
+let lastCanvasW = -1;
+let lastCanvasH = -1;
 
 // Adaptive performance mode to avoid browser reloads on low-memory/slow devices
 type PerfMode = 'auto' | 'low' | 'high';
@@ -167,6 +178,8 @@ function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(1); // keep p5 coordinates in CSS pixels to match Leaflet container points
   colorMode(HSB, 360, 100, 100, 100);
+  lastCanvasW = windowWidth;
+  lastCanvasH = windowHeight;
   // Determine initial performance mode from URL or device hints
   try {
     const ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
@@ -175,6 +188,37 @@ function setup() {
     const perfParam = (params.get('perf') || '').toLowerCase();
     if (perfParam === 'low' || perfParam === 'high') performanceMode = perfParam as PerfMode;
     isLowPerfDevice = performanceMode === 'low' || (performanceMode === 'auto' && (likelyMobile || Math.min(windowWidth, windowHeight) < 700));
+    // Thickness tuning: ?thick=2.5 (clamped)
+    const thickParam = params.get('thick') || params.get('thickness') || params.get('size');
+    if (thickParam != null) {
+      const v = Number(thickParam);
+      if (isFinite(v) && v > 0) particleThicknessMultiplier = constrain(v, 0.5, 8);
+    } else {
+      // Default pronounced but not overly thick
+      particleThicknessMultiplier = isLowPerfDevice ? 1.4 : 1.6;
+    }
+    // Trail persistence tuning: ?trail=off | number (0..100) | long/short
+    const trailParam = (params.get('trail') || '').toLowerCase();
+    if (trailParam) {
+      if (trailParam === 'off' || trailParam === '0') { trailEnabled = false; }
+      else if (trailParam === 'long') { trailEnabled = true; trailFadePct = 2; }
+      else if (trailParam === 'short') { trailEnabled = true; trailFadePct = 8; }
+      else {
+        const v = Number(trailParam);
+        if (isFinite(v)) { trailEnabled = true; trailFadePct = constrain(Math.floor(v), 1, 20); }
+      }
+    } else {
+      trailEnabled = true;
+      trailFadePct = isLowPerfDevice ? 6 : 4;
+    }
+    // Per-frame segment length: ?trailseg=1.6 (clamped)
+    const segParam = params.get('trailseg') || params.get('seg') || params.get('traillen');
+    if (segParam != null) {
+      const v = Number(segParam);
+      if (isFinite(v) && v > 0) segmentLengthMultiplier = constrain(v, 1.0, 3.0);
+    } else {
+      segmentLengthMultiplier = isLowPerfDevice ? 1.2 : 1.4;
+    }
   } catch {}
   // Particle density scales with viewport; lower on low-perf devices
   const baseDensity = isLowPerfDevice ? 0.0016 : 0.0032;
@@ -229,7 +273,17 @@ function setup() {
 }
 
 function windowResized() {
+  // Only resize if dimensions actually changed; Leaflet zoom dispatches 'resize' without size change
+  if (windowWidth === lastCanvasW && windowHeight === lastCanvasH) {
+    // Still mark caches dirty so projections can update if needed
+    hullDirty = true;
+    stationCacheDirty = true;
+    flowGridDirty = true;
+    return;
+  }
   resizeCanvas(windowWidth, windowHeight);
+  lastCanvasW = windowWidth;
+  lastCanvasH = windowHeight;
   hullDirty = true;
   mapLayer = createGraphics(windowWidth, windowHeight);
   mapLayer.pixelDensity(1);
@@ -349,8 +403,20 @@ async function fetchWeather() {
 }
 
 function draw() {
-  // Transparent frame; manually fade trails using alpha in stroke
-  clear();
+  // Persistent trails: fade previous frame slightly instead of full clear
+  if (trailEnabled) {
+    push();
+    // Use destination-out to apply uniform alpha fade to existing pixels
+    drawingContext.save();
+    drawingContext.globalCompositeOperation = 'destination-out';
+    noStroke();
+    fill(0, 0, 0, trailFadePct);
+    rect(0, 0, width, height);
+    drawingContext.restore();
+    pop();
+  } else {
+    clear();
+  }
   const dt = deltaTime / 16.6667; // normalize to ~60fps
   // Adaptive performance guard: demote to low mode on sustained slow frames
   try {
@@ -447,9 +513,12 @@ function draw() {
       alpha = 20 + 40 * constrain(c, 0, 1);
     }
     stroke(hueLocal, 40 + 32 * speedNorm, 100, alpha);
-    const sw = 0.9 + speedNorm * 1.6; // bigger in stronger wind
+    // Slightly attenuate thickness when segments are long to avoid heavy look
+    const lengthAtten = 1 / (0.7 + 0.3 * segmentLengthMultiplier);
+    const sw = (0.9 + speedNorm * 1.6) * particleThicknessMultiplier * lengthAtten;
     strokeWeight(sw);
-    line(p.x, p.y, p.x + vx, p.y + vy);
+    // Draw longer visible segments without increasing actual motion step
+    line(p.x, p.y, p.x + vx * segmentLengthMultiplier, p.y + vy * segmentLengthMultiplier);
     p.x += vx;
     p.y += vy;
     (p as any).vx = vx;

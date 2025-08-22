@@ -82,6 +82,11 @@
           }, 120);
         };
         map.on('zoomstart', () => { try { window.clearStationEmitters && window.clearStationEmitters(); } catch {} });
+        // On zoomend, invalidate size and allow p5 to update projections without clearing trails
+        map.on('zoomend', () => {
+          try { map.invalidateSize(); } catch {}
+          try { window.dispatchEvent(new Event('resize')); } catch {}
+        });
         map.on('zoom', debouncedResize);
         map.on('move', debouncedResize);
         window.addEventListener('resize', debouncedResize);

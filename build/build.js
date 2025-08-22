@@ -234,7 +234,7 @@ var ColorHelper = (function () {
         config: {
             tileFilter: 'grayscale(1) brightness(0.70) contrast(1.10) saturate(0.20)',
             darkOverlayOpacity: 0.18,
-            topoOpacity: 0.45,
+            topoOpacity: 1,
             labelOpacity: 0.1,
             topoUrl: 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png',
             labelsUrl: 'https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png',
@@ -769,6 +769,12 @@ var totalPoints = 5000;
 var activePoints = 0;
 var rampStartMs = 0;
 var RAMP_DURATION_MS = 4500;
+var particleThicknessMultiplier = 1.0;
+var trailEnabled = true;
+var trailFadePct = 4;
+var segmentLengthMultiplier = 1.0;
+var lastCanvasW = -1;
+var lastCanvasH = -1;
 var performanceMode = 'auto';
 var isLowPerfDevice = false;
 var enableStationSmoke = true;
@@ -889,6 +895,8 @@ function setup() {
     createCanvas(windowWidth, windowHeight);
     pixelDensity(1);
     colorMode(HSB, 360, 100, 100, 100);
+    lastCanvasW = windowWidth;
+    lastCanvasH = windowHeight;
     try {
         var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
         var likelyMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
@@ -897,6 +905,49 @@ function setup() {
         if (perfParam === 'low' || perfParam === 'high')
             performanceMode = perfParam;
         isLowPerfDevice = performanceMode === 'low' || (performanceMode === 'auto' && (likelyMobile || Math.min(windowWidth, windowHeight) < 700));
+        var thickParam = params.get('thick') || params.get('thickness') || params.get('size');
+        if (thickParam != null) {
+            var v = Number(thickParam);
+            if (isFinite(v) && v > 0)
+                particleThicknessMultiplier = constrain(v, 0.5, 8);
+        }
+        else {
+            particleThicknessMultiplier = isLowPerfDevice ? 1.4 : 1.6;
+        }
+        var trailParam = (params.get('trail') || '').toLowerCase();
+        if (trailParam) {
+            if (trailParam === 'off' || trailParam === '0') {
+                trailEnabled = false;
+            }
+            else if (trailParam === 'long') {
+                trailEnabled = true;
+                trailFadePct = 2;
+            }
+            else if (trailParam === 'short') {
+                trailEnabled = true;
+                trailFadePct = 8;
+            }
+            else {
+                var v = Number(trailParam);
+                if (isFinite(v)) {
+                    trailEnabled = true;
+                    trailFadePct = constrain(Math.floor(v), 1, 20);
+                }
+            }
+        }
+        else {
+            trailEnabled = true;
+            trailFadePct = isLowPerfDevice ? 6 : 4;
+        }
+        var segParam = params.get('trailseg') || params.get('seg') || params.get('traillen');
+        if (segParam != null) {
+            var v = Number(segParam);
+            if (isFinite(v) && v > 0)
+                segmentLengthMultiplier = constrain(v, 1.0, 3.0);
+        }
+        else {
+            segmentLengthMultiplier = isLowPerfDevice ? 1.2 : 1.4;
+        }
     }
     catch (_b) { }
     var baseDensity = isLowPerfDevice ? 0.0016 : 0.0032;
@@ -951,7 +1002,15 @@ function setup() {
     clear();
 }
 function windowResized() {
+    if (windowWidth === lastCanvasW && windowHeight === lastCanvasH) {
+        hullDirty = true;
+        stationCacheDirty = true;
+        flowGridDirty = true;
+        return;
+    }
     resizeCanvas(windowWidth, windowHeight);
+    lastCanvasW = windowWidth;
+    lastCanvasH = windowHeight;
     hullDirty = true;
     mapLayer = createGraphics(windowWidth, windowHeight);
     mapLayer.pixelDensity(1);
@@ -1154,7 +1213,19 @@ function fetchWeather() {
     });
 }
 function draw() {
-    clear();
+    if (trailEnabled) {
+        push();
+        drawingContext.save();
+        drawingContext.globalCompositeOperation = 'destination-out';
+        noStroke();
+        fill(0, 0, 0, trailFadePct);
+        rect(0, 0, width, height);
+        drawingContext.restore();
+        pop();
+    }
+    else {
+        clear();
+    }
     var dt = deltaTime / 16.6667;
     try {
         var dtMs = deltaTime;
@@ -1251,9 +1322,10 @@ function draw() {
             alpha_1 = 20 + 40 * constrain(c, 0, 1);
         }
         stroke(hueLocal, 40 + 32 * speedNorm, 100, alpha_1);
-        var sw = 0.9 + speedNorm * 1.6;
+        var lengthAtten = 1 / (0.7 + 0.3 * segmentLengthMultiplier);
+        var sw = (0.9 + speedNorm * 1.6) * particleThicknessMultiplier * lengthAtten;
         strokeWeight(sw);
-        line(p.x, p.y, p.x + vx, p.y + vy);
+        line(p.x, p.y, p.x + vx * segmentLengthMultiplier, p.y + vy * segmentLengthMultiplier);
         p.x += vx;
         p.y += vy;
         p.vx = vx;

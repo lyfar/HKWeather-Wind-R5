@@ -1,5 +1,7 @@
 <html>
   <head>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"
       integrity="sha512-N4kV7GkNv7QR7RX9YF/olywyIgIwNvfEe2nZtfyj73HdjCUkAfOBDbcuJ/cTaN04JKRnw1YG1wnUyNKMsNgg3g=="
       crossorigin="anonymous"
@@ -19,9 +21,65 @@
         padding: 0px;
         margin: 0px;
       }
+      html, body { height: 100%; background: #000; }
+      #map { position: fixed; inset: 0; z-index: 0; background: #000; }
+      /* Dark style for raster tiles */
+      #map .leaflet-tile { filter: grayscale(1) brightness(0.24) contrast(1.35) saturate(0.28); }
+      canvas { position: fixed; inset: 0; z-index: 10; background: transparent !important; pointer-events: none; image-rendering: pixelated; }
+      /* optional extra darkening below canvas, above map */
+      #dark-overlay { position: fixed; inset: 0; z-index: 5; background: rgba(0,0,0,0.55); pointer-events: none; }
+      #landsd-attrib { position: fixed; left: 10px; bottom: 8px; z-index: 11; color: #bbb; font: 12px/1.2 -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif; background: rgba(0,0,0,0.25); padding: 4px 6px; border-radius: 6px; }
+      .station-tooltip { background: rgba(0,0,0,0.8) !important; color: white !important; border: 1px solid #444 !important; border-radius: 4px !important; }
     </style>
-    <script></script>
+    <script>
+      window.addEventListener('DOMContentLoaded', () => {
+        const mapDiv = document.getElementById('map');
+        if (!mapDiv) return;
+        const map = L.map('map', { zoomControl: false, attributionControl: false, keyboard: true });
+        // Tighten bounds to exactly match the lon/lat normalization used in p5 mapping
+        const bounds = L.latLngBounds(L.latLng(22.17, 113.85), L.latLng(22.56, 114.36));
+        map.fitBounds(bounds, { padding: [0, 0] });
+        map.setMinZoom(10);
+        map.setMaxZoom(20);
+        map.setMaxBounds(bounds.pad(0.25));
+        const topo = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/basemap/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 1.0, updateWhenZooming: false, updateWhenIdle: true }).addTo(map);
+        const labels = L.tileLayer('https://mapapi.geodata.gov.hk/gs/api/v1.0.0/xyz/label/hk/en/WGS84/{z}/{x}/{y}.png', { maxZoom: 20, crossOrigin: true, opacity: 0.0 }).addTo(map);
+        // Station markers layer
+        window.stationMarkers = L.layerGroup().addTo(map);
+        // Station markers layer created
+        // Enable interactions for exploring; keep bounds to HK
+        map.scrollWheelZoom.enable();
+        map.dragging.enable();
+        map.doubleClickZoom.enable();
+        map.boxZoom.enable();
+        map.touchZoom.enable();
+        // Add attribution safely
+        try {
+          map.attributionControl.addAttribution('Map © <a href="https://www.landsd.gov.hk/" target="_blank">Lands Department</a>');
+        } catch(e) {
+          console.warn('Attribution control error:', e);
+        }
+        window.leafletMap = map;
+        // Keep p5 overlays aligned on map zoom/pan
+        // Debounce resize/realign events to avoid storms while interacting
+        let __resizeTimer = null;
+        const debouncedResize = () => {
+          if (__resizeTimer) clearTimeout(__resizeTimer);
+          __resizeTimer = setTimeout(() => {
+            try { window.dispatchEvent(new Event('resize')); } catch {}
+            try { map.invalidateSize(); } catch {}
+          }, 120);
+        };
+        map.on('zoomstart', () => { try { window.clearStationEmitters && window.clearStationEmitters(); } catch {} });
+        map.on('zoom', debouncedResize);
+        map.on('move', debouncedResize);
+        window.addEventListener('resize', debouncedResize);
+      });
+    </script>
   </head>
 
-  <body></body>
+  <body>
+    <div id="map"></div>
+    <div id="landsd-attrib">Map © Lands Department</div>
+  </body>
 </html>

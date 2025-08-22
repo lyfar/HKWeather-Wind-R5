@@ -769,6 +769,15 @@ var totalPoints = 5000;
 var activePoints = 0;
 var rampStartMs = 0;
 var RAMP_DURATION_MS = 4500;
+var performanceMode = 'auto';
+var isLowPerfDevice = false;
+var enableStationSmoke = true;
+var slowFrameCounter = 0;
+var fastFrameCounter = 0;
+var LOW_DT_THRESHOLD_MS = 28;
+var VERY_LOW_DT_MS = 50;
+var SLOW_FRAMES_TO_LOWER = 45;
+var FAST_FRAMES_TO_RAISE = 240;
 var noiseMultiplier = 0.01;
 var currentTempC = null;
 var windSpeedKmhTarget = NaN;
@@ -880,7 +889,21 @@ function setup() {
     createCanvas(windowWidth, windowHeight);
     pixelDensity(1);
     colorMode(HSB, 360, 100, 100, 100);
-    totalPoints = constrain(Math.floor(windowWidth * windowHeight * 0.0032), 5000, 12000);
+    try {
+        var ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
+        var likelyMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+        var params = new URLSearchParams(location.search);
+        var perfParam = (params.get('perf') || '').toLowerCase();
+        if (perfParam === 'low' || perfParam === 'high')
+            performanceMode = perfParam;
+        isLowPerfDevice = performanceMode === 'low' || (performanceMode === 'auto' && (likelyMobile || Math.min(windowWidth, windowHeight) < 700));
+    }
+    catch (_b) { }
+    var baseDensity = isLowPerfDevice ? 0.0016 : 0.0032;
+    var minPts = isLowPerfDevice ? 3000 : 5000;
+    var maxPts = isLowPerfDevice ? 6000 : 12000;
+    totalPoints = constrain(Math.floor(windowWidth * windowHeight * baseDensity), minPts, maxPts);
+    enableStationSmoke = !isLowPerfDevice;
     mapLayer = createGraphics(windowWidth, windowHeight);
     mapLayer.pixelDensity(1);
     rampStartMs = millis();
@@ -890,13 +913,27 @@ function setup() {
         try {
             (document.querySelector('canvas').style.pointerEvents = 'none');
         }
-        catch (_b) { }
+        catch (_c) { }
         document.addEventListener('mousemove', function (e) {
             window.__mouseClient = { x: e.clientX, y: e.clientY };
         }, { passive: true });
         window.clearStationEmitters = clearStationEmitters;
     }
-    catch (_c) { }
+    catch (_d) { }
+    try {
+        document.addEventListener('visibilitychange', function () {
+            try {
+                if (document.hidden) {
+                    noLoop();
+                }
+                else {
+                    loop();
+                }
+            }
+            catch (_a) { }
+        }, { passive: true });
+    }
+    catch (_e) { }
     for (var i = 0; i < totalPoints; i++) {
         var v = createVector(random(width), random(height));
         v.vx = cos(random(TWO_PI));
@@ -1119,9 +1156,33 @@ function fetchWeather() {
 function draw() {
     clear();
     var dt = deltaTime / 16.6667;
+    try {
+        var dtMs = deltaTime;
+        if (dtMs > VERY_LOW_DT_MS)
+            slowFrameCounter += 4;
+        else if (dtMs > LOW_DT_THRESHOLD_MS)
+            slowFrameCounter++;
+        else
+            slowFrameCounter = Math.max(0, slowFrameCounter - 1);
+        if (dtMs <= LOW_DT_THRESHOLD_MS)
+            fastFrameCounter++;
+        else
+            fastFrameCounter = Math.max(0, fastFrameCounter - 2);
+        if (!isLowPerfDevice && (slowFrameCounter >= SLOW_FRAMES_TO_LOWER)) {
+            isLowPerfDevice = true;
+            enableStationSmoke = false;
+        }
+        else if (isLowPerfDevice && performanceMode !== 'low' && fastFrameCounter >= FAST_FRAMES_TO_RAISE) {
+            isLowPerfDevice = false;
+            enableStationSmoke = true;
+        }
+    }
+    catch (_a) { }
     var tRamp = constrain((millis() - rampStartMs) / RAMP_DURATION_MS, 0, 1);
     var easeOutCubic = function (x) { return 1 - Math.pow(1 - x, 3); };
-    var targetCount = Math.floor(totalPoints * easeOutCubic(tRamp));
+    var desired = Math.floor(totalPoints * easeOutCubic(tRamp));
+    var maxActive = isLowPerfDevice ? Math.min(totalPoints, 6000) : totalPoints;
+    var targetCount = Math.min(desired, maxActive);
     if (targetCount > activePoints)
         activePoints = targetCount;
     if (isNaN(windSpeedKmhCurrent) && !isNaN(windSpeedKmhTarget))
@@ -1206,7 +1267,7 @@ function draw() {
     drawTemperatureTopRight();
     drawTopLeftClock();
     drawStationSwitcherBottomLeft();
-    emitFromEdges(48);
+    emitFromEdges(isLowPerfDevice ? 24 : 48);
     densifySparseCells(MAX_DENSIFY_PER_FRAME);
     drawInfoUI();
 }
@@ -1465,6 +1526,17 @@ function drawTopLeftClock() {
 function drawStationsBackground() {
     if (multiStationSamples.length === 0)
         return;
+    if (!enableStationSmoke) {
+        var r_1 = max(4, min(width, height) * 0.0045);
+        updateStationScreenCache();
+        for (var idx = 0; idx < stationScreenCache.length; idx++) {
+            var s = stationScreenCache[idx];
+            noStroke();
+            fill(0, 0, 70, 40);
+            circle(s.sx, s.sy, r_1 * 2);
+        }
+        return;
+    }
     var r = max(4, min(width, height) * 0.0045);
     updateStationScreenCache();
     for (var idx = 0; idx < stationScreenCache.length; idx++) {
@@ -1489,7 +1561,8 @@ function drawStationsBackground() {
         var ay = s.uy;
         var speedNorm = constrain(s.speed, 0, 60) / 60;
         var baseV = lerp(0.4, 2.5, speedNorm);
-        var spawn = frameCount % 3 === 0 ? 1 : 0;
+        var baseEvery = isLowPerfDevice ? 5 : 3;
+        var spawn = frameCount % baseEvery === 0 ? 1 : 0;
         for (var n = 0; n < spawn; n++) {
             var jx = random(-r * 0.6, r * 0.6);
             var jy = random(-r * 0.6, r * 0.6);
@@ -1497,8 +1570,9 @@ function drawStationsBackground() {
             em.particles.push(sp);
         }
         var arr = em.particles;
-        if (arr.length > 15)
-            arr.splice(0, arr.length - 15);
+        var cap = isLowPerfDevice ? 8 : 15;
+        if (arr.length > cap)
+            arr.splice(0, arr.length - cap);
         for (var i = arr.length - 1; i >= 0; i--) {
             var p = arr[i];
             p.update(dt);
@@ -1712,7 +1786,8 @@ function updateStationScreenCache() {
 function rebuildFlowGridIfNeeded() {
     if (!flowGridDirty || stationScreenCache.length === 0)
         return;
-    var targetCell = max(28, min(width, height) * 0.04);
+    var cellFactor = isLowPerfDevice ? 0.06 : 0.04;
+    var targetCell = max(28, min(width, height) * cellFactor);
     var cols = max(2, Math.floor(width / targetCell));
     var rows = max(2, Math.floor(height / targetCell));
     var cellW = width / cols;

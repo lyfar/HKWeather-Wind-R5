@@ -7,6 +7,18 @@ let activePoints = 0; // gradually ramps up to totalPoints
 let rampStartMs = 0;
 const RAMP_DURATION_MS = 4500;
 
+// Adaptive performance mode to avoid browser reloads on low-memory/slow devices
+type PerfMode = 'auto' | 'low' | 'high';
+let performanceMode: PerfMode = 'auto';
+let isLowPerfDevice = false;
+let enableStationSmoke = true;
+let slowFrameCounter = 0;
+let fastFrameCounter = 0;
+const LOW_DT_THRESHOLD_MS = 28; // ~36 FPS
+const VERY_LOW_DT_MS = 50;      // severe slow frame
+const SLOW_FRAMES_TO_LOWER = 45; // ~0.75s of sustained slowdown
+const FAST_FRAMES_TO_RAISE = 240; // ~4s of sustained good perf
+
 let noiseMultiplier = 0.01;
 // flow always follows real wind; no random direction flips
 
@@ -155,8 +167,21 @@ function setup() {
   createCanvas(windowWidth, windowHeight);
   pixelDensity(1); // keep p5 coordinates in CSS pixels to match Leaflet container points
   colorMode(HSB, 360, 100, 100, 100);
-  // Slightly higher density for better visibility while keeping performance reasonable
-  totalPoints = constrain(Math.floor(windowWidth * windowHeight * 0.0032), 5000, 12000);
+  // Determine initial performance mode from URL or device hints
+  try {
+    const ua = (navigator && navigator.userAgent) ? navigator.userAgent : '';
+    const likelyMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(ua);
+    const params = new URLSearchParams(location.search);
+    const perfParam = (params.get('perf') || '').toLowerCase();
+    if (perfParam === 'low' || perfParam === 'high') performanceMode = perfParam as PerfMode;
+    isLowPerfDevice = performanceMode === 'low' || (performanceMode === 'auto' && (likelyMobile || Math.min(windowWidth, windowHeight) < 700));
+  } catch {}
+  // Particle density scales with viewport; lower on low-perf devices
+  const baseDensity = isLowPerfDevice ? 0.0016 : 0.0032;
+  const minPts = isLowPerfDevice ? 3000 : 5000;
+  const maxPts = isLowPerfDevice ? 6000 : 12000;
+  totalPoints = constrain(Math.floor(windowWidth * windowHeight * baseDensity), minPts, maxPts);
+  enableStationSmoke = !isLowPerfDevice;
   // Offscreen layer for minimal map
   mapLayer = createGraphics(windowWidth, windowHeight);
   mapLayer.pixelDensity(1);
@@ -173,6 +198,14 @@ function setup() {
     }, { passive: true });
     // Expose clear function to window for Leaflet hooks
     (window as any).clearStationEmitters = clearStationEmitters;
+  } catch {}
+  // Pause drawing when the tab is not visible to reduce resource spikes on mobile
+  try {
+    document.addEventListener('visibilitychange', () => {
+      try {
+        if (document.hidden) { noLoop(); } else { loop(); }
+      } catch {}
+    }, { passive: true as any });
   } catch {}
   for (let i = 0; i < totalPoints; i++) {
     const v = createVector(random(width), random(height));
@@ -319,10 +352,29 @@ function draw() {
   // Transparent frame; manually fade trails using alpha in stroke
   clear();
   const dt = deltaTime / 16.6667; // normalize to ~60fps
+  // Adaptive performance guard: demote to low mode on sustained slow frames
+  try {
+    const dtMs = deltaTime;
+    if (dtMs > VERY_LOW_DT_MS) slowFrameCounter += 4; // heavy penalty for very slow frames
+    else if (dtMs > LOW_DT_THRESHOLD_MS) slowFrameCounter++;
+    else slowFrameCounter = Math.max(0, slowFrameCounter - 1);
+    if (dtMs <= LOW_DT_THRESHOLD_MS) fastFrameCounter++;
+    else fastFrameCounter = Math.max(0, fastFrameCounter - 2);
+    if (!isLowPerfDevice && (slowFrameCounter >= SLOW_FRAMES_TO_LOWER)) {
+      isLowPerfDevice = true;
+      enableStationSmoke = false;
+    } else if (isLowPerfDevice && performanceMode !== 'low' && fastFrameCounter >= FAST_FRAMES_TO_RAISE) {
+      // allow recovery only if user didn't force low
+      isLowPerfDevice = false;
+      enableStationSmoke = true;
+    }
+  } catch {}
   // Gradual ramp: ease-out to full particle count over a few seconds
   const tRamp = constrain((millis() - rampStartMs) / RAMP_DURATION_MS, 0, 1);
   const easeOutCubic = (x: number) => 1 - Math.pow(1 - x, 3);
-  const targetCount = Math.floor(totalPoints * easeOutCubic(tRamp));
+  const desired = Math.floor(totalPoints * easeOutCubic(tRamp));
+  const maxActive = isLowPerfDevice ? Math.min(totalPoints, 6000) : totalPoints;
+  const targetCount = Math.min(desired, maxActive);
   if (targetCount > activePoints) activePoints = targetCount;
   // Initialize current on first valid target
   if (isNaN(windSpeedKmhCurrent) && !isNaN(windSpeedKmhTarget)) windSpeedKmhCurrent = windSpeedKmhTarget;
@@ -417,7 +469,7 @@ function draw() {
   drawTopLeftClock();
   drawStationSwitcherBottomLeft();
   // continuously inject a few particles from all edges when flow enters
-  emitFromEdges(48);
+  emitFromEdges(isLowPerfDevice ? 24 : 48);
   densifySparseCells(MAX_DENSIFY_PER_FRAME);
   drawInfoUI();
 }
@@ -655,6 +707,18 @@ function drawTopLeftClock() {
 // Background pass: render faint smoke and dots behind the flow
 function drawStationsBackground() {
   if (multiStationSamples.length === 0) return;
+  if (!enableStationSmoke) {
+    // Still draw small dots to anchor stations, but skip smoke
+    const r = max(4, min(width, height) * 0.0045);
+    updateStationScreenCache();
+    for (let idx = 0; idx < stationScreenCache.length; idx++) {
+      const s = stationScreenCache[idx];
+      noStroke();
+      fill(0, 0, 70, 40);
+      circle(s.sx, s.sy, r * 2);
+    }
+    return;
+  }
   const r = max(4, min(width, height) * 0.0045);
   updateStationScreenCache();
   for (let idx = 0; idx < stationScreenCache.length; idx++) {
@@ -681,8 +745,9 @@ function drawStationsBackground() {
     const ay = s.uy;
     const speedNorm = constrain(s.speed, 0, 60) / 60;
     const baseV = lerp(0.4, 2.5, speedNorm);
-    // Reduce smoke spawn rate for performance
-    const spawn = frameCount % 3 === 0 ? 1 : 0; // spawn every 3rd frame
+    // Reduce smoke spawn rate for performance; even lower on low-perf
+    const baseEvery = isLowPerfDevice ? 5 : 3;
+    const spawn = frameCount % baseEvery === 0 ? 1 : 0; // spawn every Nth frame
     for (let n = 0; n < spawn; n++) {
       const jx = random(-r * 0.6, r * 0.6);
       const jy = random(-r * 0.6, r * 0.6);
@@ -698,7 +763,8 @@ function drawStationsBackground() {
     }
     // update/draw particles, remove dead; limit max particles per emitter
     const arr = em.particles;
-    if (arr.length > 15) arr.splice(0, arr.length - 15); // cap at 15 particles per station
+    const cap = isLowPerfDevice ? 8 : 15;
+    if (arr.length > cap) arr.splice(0, arr.length - cap);
     for (let i = arr.length - 1; i >= 0; i--) {
       const p = arr[i];
       p.update(dt);
@@ -912,7 +978,9 @@ function updateStationScreenCache() {
 
 function rebuildFlowGridIfNeeded() {
   if (!flowGridDirty || stationScreenCache.length === 0) return;
-  const targetCell = max(28, min(width, height) * 0.04); // adaptive resolution
+  // Coarser grid on low-perf to reduce CPU/memory
+  const cellFactor = isLowPerfDevice ? 0.06 : 0.04;
+  const targetCell = max(28, min(width, height) * cellFactor); // adaptive resolution
   const cols = max(2, Math.floor(width / targetCell));
   const rows = max(2, Math.floor(height / targetCell));
   const cellW = width / cols;
